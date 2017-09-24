@@ -1,12 +1,13 @@
 import React, { Component } from 'react'
 import DebounceInput from 'react-debounce-input'
+import DocumentTitle from 'react-document-title'
 import Drawer from 'rc-drawer'
 import find from 'lodash/find'
 
 import api from '../api'
-import Map from '../components/map'
-import Header from '../components/Header'
-
+import Map from '../components/Map'
+import { Card, CardHeader, CardText, CardActions } from 'material-ui/Card'
+import FlatButton from 'material-ui/FlatButton';
 import './InfoPanel.css'
 import './Map.css'
 
@@ -130,24 +131,33 @@ class MapScreen extends Component {
       const collectionCenterData = this.state.activeCenter
 
       products = collectionCenterData.products && collectionCenterData.products.map((prod) => {
-        return <div>
+        return <li>
           { prod.nombre }
-        </div>
+        </li>
       })
       contacts = collectionCenterData.contacts && <div>
         <hr />
         <h3> Información de contacto </h3>
         <div className="contacts">
           { collectionCenterData.contacts.map((contact) => {
-            return <div>
-              { contact.nombre && <div> Nombre: { contact.nombre } </div> }
-              { contact.telefono && <div> Teléfono: { contact.telefono } </div> }
-              { contact.email && <div> Email: { contact.email } </div> }
-              { contact.twitter && <div> Twitter: { contact.twitter } </div> }
-              { contact.facebook && <div> Facebook: { contact.facebook } </div> }
-            </div>
-          })
-          }
+            return (
+              <div>
+                <ul>
+                  { contact.nombre && <li><strong>Nombre:</strong> { contact.nombre } </li> }
+                  { contact.telefono && <li><strong>Teléfono:</strong> { contact.telefono } </li> }
+                  { contact.email && <li><strong>Email:</strong> { contact.email } </li> }
+                  { contact.twitter && <li><strong>Twitter:</strong> { contact.twitter } </li> }
+                  { contact.facebook && <li><strong>Facebook:</strong> { contact.facebook } </li> }
+                </ul>
+                <CardActions>
+                  { contact.telefono && <FlatButton label="Llamar" href={'tel:' + contact.telefono.replace(/[\s-+]/g, '')} /> }
+                  { contact.email && <FlatButton label="Enviar Correo" href={'mailto:' + contact.email} /> }
+                  { contact.twitter && <FlatButton label="Ver Twitter" href={'https://twitter.com/' + contact.twitter} /> }
+                  { contact.twitter && <FlatButton label="Ver Facebook" href={'https://facebook.com/' + contact.facebook} /> }
+                </CardActions>
+              </div>
+            )
+          })}
         </div>
       </div>
       drawer = (<div>
@@ -158,13 +168,13 @@ class MapScreen extends Component {
         }
         <h3>{collectionCenterData.nombre}</h3>
         <address>
-          Direccion: {collectionCenterData.direccion}
+          <strong>Direccion:</strong> {collectionCenterData.direccion}
         </address>
-
-        {products}
-
+        <ul>
+          {products}
+        </ul>
         {contacts}
-        <div className="close" onClick={this.closeDrawer.bind(this)}><span>Close</span></div>
+        <div className="close" onClick={this.closeDrawer.bind(this)}><span>Cerrar</span></div>
         <div className="pad" />
       </div>)
     } else if (this.state.search) {
@@ -213,21 +223,23 @@ class MapScreen extends Component {
       onOpenChange: this.onOpenChange.bind(this),
     }
 
-    return (
-      <div className="App drawer-container">
-        <Drawer sidebar={drawer} {...drawerProps} style={{ overflow: 'auto' }}>
-          <Header>
-            <nav className="navigation">
-              <button onClick={this.centerMapOnUserLocation.bind(this)}>Cerca de mí</button>
-            </nav>
+    const title = `Mapa · ${process.env.REACT_APP_NAME}`
 
-          </Header>
-          <div className="map-container">
-            <button className="cta" onClick={this.openSearch.bind(this)}>Quiero Ayudar</button>
-            <Map collectionCenters={this.state.collectionCenters} onSelect={this.selectCenter.bind(this)} ref={map => this.map = map} />
+    return (
+      <DocumentTitle title={title}>
+        <div className="App drawer-container">
+          <div className="cta">
+            <span onClick={ this.centerMapOnUserLocation.bind(this) }>Cerca de mí</span>
+            <span> | </span>
+            <span  onClick={ this.openSearch.bind(this) }>Quiero Ayudar</span>
           </div>
-        </Drawer>
-      </div>
+          <Drawer sidebar={drawer} {...drawerProps} style={{ overflow: 'auto' }}>
+            <div className="map-container">
+              <Map collectionCenters={this.state.collectionCenters} onSelect={this.selectCenter.bind(this)} ref={map => this.map = map} />
+            </div>
+          </Drawer>
+        </div>
+      </DocumentTitle>
     )
   }
 

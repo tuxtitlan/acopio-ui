@@ -1,131 +1,124 @@
 import React, { Component } from 'react'
 
+import AcopioList from '../components/AcopioList'
 import api from '../api'
+import DocumentTitle from 'react-document-title'
+import withCurrentPosition from '../components/withCurrentPosition'
+
+const ACOPIOS_LIMIT = 20
+
+const getNearbyAcopios = (position) => {
+  if (!position) {
+    return Promise.reject(new Error('no location'))
+  }
+
+  const filter = {
+    where: {
+      geopos: {
+        near: position
+      }
+    },
+    include: 'productos',
+    limit: ACOPIOS_LIMIT
+  }
+
+  return api.getAcopiosWhere(JSON.stringify(filter))
+}
+
+const getRecentlyUpdatedAcopios = () => {
+  const filter = {
+    include: {
+      relation: 'productos',
+      scope: {
+        order: 'fechaDeActualizacion DESC'
+      }
+    },
+    order: 'fechaDeActualizacion DESC',
+    limit: ACOPIOS_LIMIT
+  }
+
+  return api.getAcopiosWhere(JSON.stringify(filter))
+}
 
 class Supply extends Component {
   constructor (props) {
     super(props)
     this.state = {
-      centers: [],
-      currentLocation: null,
-      loadedProducts: false
-    }
-    this.getNearbyCenters()
-  }
-
-  getCurrentPosition (center) {
-    navigator.geolocation.getCurrentPosition(position => {
-      center([position.coords.longitude, position.coords.latitude])
-    })
-  }
-
-  getNearbyCenters (centers) {
-    const parent = this
-    this.getCurrentPosition(function (position) {
-      position = position.reverse()
-      const filter = {
-        where: {
-          geopos: {
-            near: position,
-            maxDistance: 20,
-            unit: 'kilometers'
-          }
-        }
-      }
-      api.getAcopiosWhere(JSON.stringify(filter))
-        .then(({ data }) => {
-          parent.setState({
-            centers: data,
-            currentLocation: position
-          })
-          parent.getProducts(data)
-        })
-        .catch(err => err)
-    })
-  }
-
-  getProducts (data) {
-    const parent = this
-    const center_ids = data.map(function (d) {
-      return { 'acopioId': d.id }
-    })
-
-    const filter = {
-      where: { 'or': center_ids }
+      acopios: [],
     }
 
-    api.getProductosWhere(JSON.stringify(filter))
-      .then(({ data }) => {
-        const products = data.reduce(function (center, d) {
-          if (!center[d['acopioId']]) {
-            center[d['acopioId']] = []
-          }
-          center[d['acopioId']].push({
-            fechaDeActualizacion: d['fechaDeActualizacion'],
-            nombre: d['nombre'],
-            id: d['id']
-          })
-          return center
-        }, {})
+    this.loadAcopios(props.currentPosition)
+  }
 
-        parent.setState({
-          products: products,
-          loadedProducts: true
+  componentWillReceiveProps (nextProps) {
+    if (nextProps.currentPosition !== this.props.currentPosition) {
+      this.loadAcopios(nextProps.currentPosition)
+    }
+  }
+
+  loadRecentlyUpdatedAcopios () {
+    this.setState({ isLoading: true })
+    return getRecentlyUpdatedAcopios()
+      .then((response) => {
+        this.setState({
+          acopios: response.data,
+          isLoading: false
         })
+      })
+      .catch(err => {
+        this.setState({
+          hasError: true,
+          isLoading: false,
+        })
+        console.error(err)
       })
   }
 
-  getDistance (pos1, pos2) {
-    var R = 6371e3 // metres
-    var phi1 = pos1[0] * (Math.PI / 180)
-    var phi2 = pos2[0] * (Math.PI / 180)
-    var delta_phi = (pos2[0] - pos1[0]) * (Math.PI / 180)
-    var delta_lambda = (pos2[1] - pos1[1]) * (Math.PI / 180)
+  loadNearbyAcopios (currentPosition) {
+    this.setState({ isLoading: true })
+    return getNearbyAcopios(currentPosition)
+      .then((response) => {
+        this.setState({
+          acopios: response.data,
+          isLoading: false
+        })
+      })
+      .catch(err => {
+        this.setState({
+          hasError: true,
+          isLoading: false,
+        })
+        console.error(err)
+      })
+  }
 
-    var a = Math.sin(delta_phi / 2) * Math.sin(delta_phi / 2) +
-            Math.cos(phi1) * Math.cos(phi2) *
-            Math.sin(delta_lambda / 2) * Math.sin(delta_lambda / 2)
-    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  loadAcopios (currentPosition) {
+    if (currentPosition) {
+      return this.loadNearbyAcopios(currentPosition)
+    }
 
-    return Math.round((R * c) / 1000, 2)
+    return this.loadRecentlyUpdatedAcopios()
   }
 
   render () {
-    const parent = this
-    if (this.state.loadedProducts) {
-      const centers = this.state.centers.map(function (c) {
-        let prods = ''
-        if (parent.state.products[c.id]) {
-          prods = parent.state.products[c.id].map(function (p) {
-            return <li key={p.id} data-date={p.fechaDeActualizacion}>{p.nombre}</li>
-          })
+    const { acopios, isLoading } = this.state
+    const { positionUnavailable } = this.props
 
-          const distance = parent.getDistance(
-            [c.geopos.lat, c.geopos.lng],
-            [parent.state.currentLocation[0], parent.state.currentLocation[1]]
-          )
-          return <li key={c.id}>
-            {c.nombre} (a {distance} km)
-            <ul>
-              {prods}
-            </ul>
-          </li>
-        } else {
-          return null
-        }
-      })
-      return (
-        <div>
-          <h1>¿Que se necesita cerca de ti?</h1>
-          <ul>
-            {centers}
-          </ul>
-        </div>
-      )
-    } else {
-      return (<span>cargando</span>)
+    const title = process.env.REACT_APP_NAME
+
+    if (positionUnavailable) {
+      return <span>Ubicación no disponible</span>
     }
+
+    return (
+      <DocumentTitle title={title}>
+        <AcopioList
+          isLoading={isLoading}
+          acopios={acopios}
+        />
+      </DocumentTitle>
+    )
   }
 }
 
-export default Supply
+export default withCurrentPosition(Supply)
